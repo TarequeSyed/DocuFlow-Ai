@@ -66,7 +66,8 @@ export const api = {
     fetchApi<{ message: string }>(`/documents/${id}`, { method: "DELETE" }),
 
   // Schemas
-  getSchemas: () => fetchApi<ExtractionSchemaItem[]>("/schemas"),
+  getSchemas: () =>
+    fetchApi<{ items: ExtractionSchemaItem[]; total: number }>("/schemas").then((r) => r.items),
 
   createSchema: (data: {
     name: string;
@@ -77,6 +78,22 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+
+  updateSchema: (
+    id: string,
+    data: {
+      name: string;
+      description?: string;
+      schema_definition: Record<string, any>;
+    }
+  ) =>
+    fetchApi<ExtractionSchemaItem>(`/schemas/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  deleteSchema: (id: string) =>
+    fetchApi<void>(`/schemas/${id}`, { method: "DELETE" }),
 
   // Extractions
   runExtraction: (document_id: string, schema_id?: string) =>
