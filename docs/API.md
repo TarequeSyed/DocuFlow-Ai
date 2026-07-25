@@ -240,3 +240,38 @@ Queries document chunks using semantic similarity (vector space).
     ]
   }
   ```
+
+---
+
+### F. Demo Workspace
+
+#### `POST /api/v1/demo/seed`
+Seeds standard demo workspace dataset (6 interconnected procurement documents) and executes parsing, vector embedding, graph creation, and structured extractions automatically.
+
+- **Response (201 Created)**:
+  ```json
+  {
+    "status": "success",
+    "message": "Successfully seeded 6 demo documents.",
+    "documents": [
+      {
+        "id": "a1b2c3d4-e5f6-7a8b-9c0d-1e2f3a4b5c6d",
+        "filename": "01_quotation_acme_software.txt",
+        "status": "PARSED",
+        "category": "QUOTATION"
+      }
+    ],
+    "schema_id": "9a8b7c6d-5e4f-3a2b-1c0d-e9f8a7b6c5d4"
+  }
+  ```
+
+#### `DELETE /api/v1/demo/reset`
+Clears all workspace documents, chunks, graph entities, extractions, and schemas.
+
+- **Response (200 OK)**:
+  ```json
+  {
+    "status": "success",
+    "message": "Demo workspace database successfully reset."
+  }
+  ```
