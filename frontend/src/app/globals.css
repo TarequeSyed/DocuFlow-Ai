@@ -1,13 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #FAFBFC;
-  --foreground: #111827;
+  --background: #fcfcfd;
+  --foreground: #0f172a;
+  --card-bg: #ffffff;
+  --border-color: rgba(0, 0, 0, 0.06);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-card: var(--card-bg);
+  --color-border-glow: var(--border-color);
   --font-sans: var(--font-inter);
 }
 
@@ -15,6 +19,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  overflow-x: hidden;
+  letter-spacing: -0.015em;
 }
 
 /* Custom Scrollbar Styles for premium layout look and feel */
@@ -26,9 +32,85 @@ body {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #E5E7EB;
+  background: rgba(0, 0, 0, 0.08);
   border-radius: 9999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #D1D5DB;
+  background: rgba(0, 0, 0, 0.15);
+}
+
+/* Premium Background & Overlay Utilities (Light mode) */
+.bg-grid-dots {
+  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
+}
+
+.bg-grid-lines {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(0, 0, 0, 0.015) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(0, 0, 0, 0.015) 1px, transparent 1px);
+}
+
+/* Bright Pastel Mesh Gradient (Lumen style) */
+.bg-mesh-gradient {
+  background-color: #fcfcfd;
+  background-image:
+    radial-gradient(at 0% 0%, rgba(243, 232, 255, 0.75) 0px, transparent 60%),
+    radial-gradient(at 50% 0%, rgba(224, 231, 255, 0.85) 0px, transparent 60%),
+    radial-gradient(at 100% 0%, rgba(207, 250, 254, 0.75) 0px, transparent 60%);
+}
+
+/* Premium card styling with micro-shadow */
+.premium-card-light {
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  border-radius: 24px;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02), 0 1px 3px rgba(0, 0, 0, 0.01);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-card-light:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.04), 0 2px 6px rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+/* Selection colors */
+::selection {
+  background: rgba(99, 102, 241, 0.12);
+  color: #4f46e5;
+}
+
+/* Animated flow line utility */
+@keyframes flow-line {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-flow {
+  stroke-dasharray: 8 4;
+  animation: flow-line 1.2s linear infinite;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.3);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 10px rgba(79, 70, 229, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(79, 70, 229, 0);
+  }
+}
+
+.ring-pulse {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
