@@ -24,7 +24,7 @@ class TimelineEvent(BaseModel):
 
 
 class TimelineResponse(BaseModel):
-    events: list[TimelineEvent]
+    timeline: list[TimelineEvent]
 
 
 class TimelineService:
@@ -72,7 +72,10 @@ class TimelineService:
             event_date_str = None
             properties = {}
             if extraction and extraction.structured_data:
-                properties = extraction.structured_data
+                if isinstance(extraction.structured_data, dict) and "data" in extraction.structured_data:
+                    properties = extraction.structured_data["data"] or {}
+                elif isinstance(extraction.structured_data, dict):
+                    properties = extraction.structured_data
                 # Try common date keys
                 for date_key in [
                     "invoice_date",
@@ -139,7 +142,7 @@ class TimelineService:
         # 4. Detect missing steps in lifecycle (e.g. missing receipt)
         self._detect_missing_links(events_list)
 
-        return TimelineResponse(events=events_list)
+        return TimelineResponse(timeline=events_list)
 
     def _normalize_date(self, raw_date: str) -> str:
         """

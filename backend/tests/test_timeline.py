@@ -107,11 +107,11 @@ async def test_reconstruct_timeline_with_data(mock_db_session):
     service = TimelineService()
     res = await service.reconstruct_timeline(mock_db_session)
 
-    assert len(res.events) == 1
-    assert res.events[0].event_date == "2026-07-21"
-    assert "150.0" in res.events[0].description
+    assert len(res.timeline) == 1
+    assert res.timeline[0].event_date == "2026-07-21"
+    assert "150.0" in res.timeline[0].description
     # Preceding stages for INVOICE should be missing since it's the only doc
-    assert res.events[0].metadata.get("missing_lifecycle_links") == [
+    assert res.timeline[0].metadata.get("missing_lifecycle_links") == [
         "QUOTATION",
         "PURCHASE_ORDER",
         "DELIVERY_NOTE",
@@ -129,4 +129,4 @@ async def test_api_get_timeline(client: AsyncClient, mock_db_session):
 
     response = await client.get("/api/v1/timeline")
     assert response.status_code == 200
-    assert response.json() == {"events": []}
+    assert response.json() == {"timeline": []}

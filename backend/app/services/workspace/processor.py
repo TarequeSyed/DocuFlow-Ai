@@ -62,12 +62,15 @@ class DocumentProcessor:
                 extracted_text = "\n".join(pages).strip()
 
                 # 4. Classify Document Type
-                file_metadata = {
-                    "filename": db_doc.filename,
-                    "mime_type": db_doc.mime_type,
-                    "size_bytes": db_doc.size_bytes,
-                }
-                category = await self.classifier.classify(extracted_text, file_metadata)
+                if db_doc.category == "UNKNOWN" or not db_doc.category:
+                    file_metadata = {
+                        "filename": db_doc.filename,
+                        "mime_type": db_doc.mime_type,
+                        "size_bytes": db_doc.size_bytes,
+                    }
+                    category = await self.classifier.classify(extracted_text, file_metadata)
+                else:
+                    category = db_doc.category
 
                 # 5. Segment Text into Chunks page-by-page
                 logger.info("Splitting text layer into chunks page-by-page...")

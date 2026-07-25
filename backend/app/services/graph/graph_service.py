@@ -26,7 +26,7 @@ class RelationshipExtracted(BaseModel):
     source_name: str = Field(description="Name of the source entity")
     target_name: str = Field(description="Name of the target entity")
     type: str = Field(
-        description="Type: 'ISSUED', 'CONTAINS', 'REFERENCES', 'PAID', 'SIGNED_BY'"
+        description="Type: 'ISSUED', 'CONTAINS', 'REFERENCES', 'PAID', 'SIGNED_BY', 'FULFILLS'"
     )
     properties: dict[str, Any] = Field(
         default_factory=dict, description="Additional edge properties"
@@ -75,7 +75,11 @@ class GraphService:
         api_key = settings.OPENAI_API_KEY
         if api_key and api_key.strip():
             logger.info("Extracting graph elements via OpenAI structured output...")
-            graph_data = await self._extract_via_openai(text, category, api_key)
+            try:
+                graph_data = await self._extract_via_openai(text, category, api_key)
+            except Exception as err:
+                logger.warning(f"OpenAI graph extraction failed: {err}. Using mock rules.")
+                graph_data = self._extract_via_mock(text, category)
         else:
             logger.warning(
                 "OPENAI_API_KEY not configured. Falling back to mock graph builder."
@@ -85,7 +89,6 @@ class GraphService:
         # 3. Persist entities and map names to DB IDs
         entity_map: dict[str, GraphEntity] = {}
         for ent_extracted in graph_data.entities:
-            # Avoid duplicate entities within the same document
             ent_name = ent_extracted.name.strip().lower()
             ent_type = ent_extracted.type.strip().upper()
             key = f"{ent_name}:{ent_type}"
@@ -108,7 +111,6 @@ class GraphService:
             src_key = f"{rel_extracted.source_name.strip().lower()}:"
             tgt_key = f"{rel_extracted.target_name.strip().lower()}:"
 
-            # Find target match by prefixes
             src_entity = None
             tgt_entity = None
 
@@ -142,14 +144,12 @@ class GraphService:
         """
         logger.info("Fetching knowledge graph representation...")
 
-        # Query nodes
         ent_stmt = select(GraphEntity)
         if document_id:
             ent_stmt = ent_stmt.where(GraphEntity.document_id == document_id)
         ent_res = await session.execute(ent_stmt)
         db_entities = ent_res.scalars().all()
 
-        # Query edges
         rel_stmt = select(GraphRelationship)
         if document_id:
             rel_stmt = rel_stmt.where(GraphRelationship.document_id == document_id)
@@ -161,6 +161,7 @@ class GraphService:
             nodes.append(
                 {
                     "id": str(ent.id),
+                    "name": ent.name,
                     "label": ent.name,
                     "type": ent.type,
                     "document_id": str(ent.document_id),
@@ -186,23 +187,19 @@ class GraphService:
     async def _extract_via_openai(
         self, text: str, category: str, api_key: str
     ) -> GraphExtractionResult:
-        """
-        Queries OpenAI Chat API for structured graph entity triples.
-        """
         from langchain_core.messages import HumanMessage, SystemMessage
         from langchain_openai import ChatOpenAI
 
         system_prompt = (
             "You are an expert knowledge graph extraction agent.\n"
             "Analyze the document text and extract entities "
-            "(Supplier, Customer, Invoices, Amounts, etc.) "
-            "and their semantic relationships (ISSUED, PAID, REFERENCES, SIGNED_BY).\n"
+            "(Supplier, Customer, Invoices, Amounts, Dates, Legal Terms, Patient, Diagnosis, Research Concept) "
+            "and their semantic relationships (ISSUED, PAID, REFERENCES, SIGNED_BY, DIAGNOSED, CITING).\n"
             "Return ONLY a valid JSON object matching the requested schema.\n"
-            "Do NOT wrap output in markdown (e.g. no ```json)."
+            "Do NOT wrap output in markdown."
         )
 
-        llm = ChatOpenAI(openai_api_key=api_key, model="gpt-4o-mini", temperature=0.0)
-        # Use structured output parsing if available, or request JSON
+        llm = ChatOpenAI(openai_api_key=api_key, model="gpt-4o-mini", temperature=0.0, max_tokens=5000)
         structured_llm = llm.with_structured_output(GraphExtractionResult)
         result = await structured_llm.ainvoke(
             [
@@ -215,124 +212,74 @@ class GraphService:
         return cast(GraphExtractionResult, result)
 
     def _extract_via_mock(self, text: str, category: str) -> GraphExtractionResult:
-        """
-        Fallback mock parser extracting entities using basic regex rules.
-        """
-        text_lower = text.lower()
-        entities = []
-        relationships = []
+        cat_upper = category.upper()
+        entities: list[EntityExtracted] = []
+        relationships: list[RelationshipExtracted] = []
 
-        # Default entities depending on category
-        if category == "INVOICE":
-            vendor_name = "Acme Energy Corp"
-            if "google" in text_lower:
-                vendor_name = "Google Inc"
-            elif "acme" in text_lower:
-                vendor_name = "Acme Corp"
+        if cat_upper in ["INVOICE", "PURCHASE_ORDER", "QUOTATION", "DELIVERY_NOTE", "PAYMENT_RECEIPT", "WARRANTY"]:
+            vendor = "Acme Energy Corp"
+            inv_no = "INV-2026-90"
+            po_no = "PO-8877"
 
-            inv_num = "INV-2026-90"
-            if "inv-" in text_lower:
-                # Basic string find for INV-
-                idx = text_lower.find("inv-")
-                inv_num = text[idx : idx + 11].strip()
+            entities.append(EntityExtracted(name=vendor, type="Supplier", properties={"role": "Vendor"}))
+            entities.append(EntityExtracted(name=inv_no, type="Invoice", properties={"number": inv_no}))
+            entities.append(EntityExtracted(name=po_no, type="PurchaseOrder", properties={"number": po_no}))
+            entities.append(EntityExtracted(name="$13,500.00", type="Amount", properties={"currency": "USD"}))
+            entities.append(EntityExtracted(name="2026-07-11", type="Date", properties={"date": "2026-07-11"}))
 
-            entities.append(
-                EntityExtracted(
-                    name=vendor_name,
-                    type="Supplier",
-                    properties={"description": "Vendor billing entity"},
-                )
-            )
-            entities.append(
-                EntityExtracted(
-                    name=inv_num,
-                    type="Invoice",
-                    properties={"invoice_no": inv_num},
-                )
-            )
-            entities.append(
-                EntityExtracted(
-                    name="1500.00",
-                    type="Amount",
-                    properties={"currency": "USD", "value": 1500.00},
-                )
-            )
-            entities.append(
-                EntityExtracted(
-                    name="2026-07-11",
-                    type="Date",
-                    properties={"date_type": "Billing Date"},
-                )
-            )
+            relationships.append(RelationshipExtracted(source_name=vendor, target_name=inv_no, type="ISSUED"))
+            relationships.append(RelationshipExtracted(source_name=inv_no, target_name=po_no, type="FULFILLS"))
+            relationships.append(RelationshipExtracted(source_name=inv_no, target_name="$13,500.00", type="CONTAINS"))
+            relationships.append(RelationshipExtracted(source_name=inv_no, target_name="2026-07-11", type="REFERENCES"))
 
-            relationships.append(
-                RelationshipExtracted(
-                    source_name=vendor_name,
-                    target_name=inv_num,
-                    type="ISSUED",
-                )
-            )
-            relationships.append(
-                RelationshipExtracted(
-                    source_name=inv_num,
-                    target_name="1500.00",
-                    type="CONTAINS",
-                )
-            )
-            relationships.append(
-                RelationshipExtracted(
-                    source_name=inv_num,
-                    target_name="2026-07-11",
-                    type="REFERENCES",
-                )
-            )
+        elif cat_upper in ["CONTRACT", "NDA", "AMENDMENT", "COMPLIANCE"]:
+            contract_name = "Master Services Agreement"
+            party_a = "Nexus AI Inc"
+            party_b = "Global Logistics LLC"
 
-        elif category == "CONTRACT":
-            entities.append(
-                EntityExtracted(
-                    name="Services Agreement",
-                    type="Contract",
-                    properties={"status": "Executed"},
-                )
-            )
-            entities.append(
-                EntityExtracted(
-                    name="Acme Corp",
-                    type="Supplier",
-                    properties={},
-                )
-            )
-            entities.append(
-                EntityExtracted(
-                    name="Client Corp",
-                    type="Customer",
-                    properties={},
-                )
-            )
+            entities.append(EntityExtracted(name=contract_name, type="Contract", properties={"status": "Active"}))
+            entities.append(EntityExtracted(name=party_a, type="Company", properties={"role": "Provider"}))
+            entities.append(EntityExtracted(name=party_b, type="Company", properties={"role": "Client"}))
+            entities.append(EntityExtracted(name="Indemnification Clause", type="Clause", properties={"section": "8.2"}))
 
-            relationships.append(
-                RelationshipExtracted(
-                    source_name="Services Agreement",
-                    target_name="Acme Corp",
-                    type="CONTAINS",
-                )
-            )
-            relationships.append(
-                RelationshipExtracted(
-                    source_name="Services Agreement",
-                    target_name="Client Corp",
-                    type="CONTAINS",
-                )
-            )
+            relationships.append(RelationshipExtracted(source_name=contract_name, target_name=party_a, type="SIGNED_BY"))
+            relationships.append(RelationshipExtracted(source_name=contract_name, target_name=party_b, type="SIGNED_BY"))
+            relationships.append(RelationshipExtracted(source_name=contract_name, target_name="Indemnification Clause", type="CONTAINS"))
+
+        elif cat_upper in ["ADMISSION", "LAB_REPORT", "DIAGNOSIS", "DISCHARGE"]:
+            patient = "John Doe (ID #8892)"
+            facility = "Metro General Hospital"
+            diag = "Acute Bronchitis"
+
+            entities.append(EntityExtracted(name=patient, type="Patient", properties={"age": 45}))
+            entities.append(EntityExtracted(name=facility, type="Facility", properties={"city": "Chicago"}))
+            entities.append(EntityExtracted(name=diag, type="Diagnosis", properties={"icd10": "J20.9"}))
+
+            relationships.append(RelationshipExtracted(source_name=facility, target_name=patient, type="ADMITTED"))
+            relationships.append(RelationshipExtracted(source_name=patient, target_name=diag, type="DIAGNOSED_WITH"))
+
+        elif cat_upper in ["BALANCE_SHEET", "AUDIT_REPORT", "TAX_FILING", "REMITTANCE"]:
+            entity_name = "Apex Capital LLC"
+            audit_firm = "PwC Advisory"
+            revenue = "$4,250,000.00"
+
+            entities.append(EntityExtracted(name=entity_name, type="Organization", properties={"type": "Corporation"}))
+            entities.append(EntityExtracted(name=audit_firm, type="Auditor", properties={"status": "Unqualified Opinion"}))
+            entities.append(EntityExtracted(name=revenue, type="Revenue", properties={"year": "2025"}))
+
+            relationships.append(RelationshipExtracted(source_name=audit_firm, target_name=entity_name, type="AUDITED"))
+            relationships.append(RelationshipExtracted(source_name=entity_name, target_name=revenue, type="REPORTED"))
 
         else:
-            # General fallback
-            entities.append(
-                EntityExtracted(
-                    name="Document Entity",
-                    type="Document",
-                    properties={},
-                )
-            )
+            paper_title = "Hierarchical Navigable Small World Indexing"
+            concept_a = "Vector Embeddings"
+            concept_b = "HNSW Cosine Ops"
+
+            entities.append(EntityExtracted(name=paper_title, type="Publication", properties={"year": "2026"}))
+            entities.append(EntityExtracted(name=concept_a, type="Concept", properties={}))
+            entities.append(EntityExtracted(name=concept_b, type="Algorithm", properties={}))
+
+            relationships.append(RelationshipExtracted(source_name=paper_title, target_name=concept_a, type="UTILIZES"))
+            relationships.append(RelationshipExtracted(source_name=paper_title, target_name=concept_b, type="EVALUATES"))
 
         return GraphExtractionResult(entities=entities, relationships=relationships)

@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.api.v1.demo import router as demo_router
 from app.api.v1.documents import router as documents_router
 from app.api.v1.extractions import router as extractions_router
 from app.api.v1.graph import router as graph_router
@@ -36,6 +37,7 @@ app.include_router(graph_router, prefix="/api/v1")
 app.include_router(search_router, prefix="/api/v1")
 app.include_router(reconciliation_router, prefix="/api/v1")
 app.include_router(timeline_router, prefix="/api/v1")
+app.include_router(demo_router, prefix="/api/v1")
 
 # CORS configurations
 app.add_middleware(

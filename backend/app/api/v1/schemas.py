@@ -1,6 +1,7 @@
+import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -45,3 +46,49 @@ async def list_schemas(
     result = await session.execute(stmt)
     schemas = result.scalars().all()
     return {"items": schemas, "total": len(schemas)}
+
+
+@router.put("/{schema_id}", response_model=SchemaResponse)
+async def update_schema(
+    schema_id: uuid.UUID,
+    payload: SchemaCreateRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> Any:
+    """
+    Updates an existing extraction schema template.
+    """
+    stmt = select(ExtractionSchema).where(ExtractionSchema.id == schema_id)
+    result = await session.execute(stmt)
+    schema = result.scalar_one_or_none()
+    if not schema:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Extraction schema template not found.",
+        )
+    schema.name = payload.name
+    schema.description = payload.description
+    schema.schema_definition = payload.schema_definition
+    await session.commit()
+    await session.refresh(schema)
+    return schema
+
+
+@router.delete("/{schema_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_schema(
+    schema_id: uuid.UUID,
+    session: AsyncSession = Depends(get_db_session),
+) -> None:
+    """
+    Deletes an existing extraction schema template.
+    """
+    stmt = select(ExtractionSchema).where(ExtractionSchema.id == schema_id)
+    result = await session.execute(stmt)
+    schema = result.scalar_one_or_none()
+    if not schema:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Extraction schema template not found.",
+        )
+    await session.delete(schema)
+    await session.commit()
+    return None

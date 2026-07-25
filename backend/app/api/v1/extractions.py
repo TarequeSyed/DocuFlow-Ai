@@ -63,7 +63,13 @@ async def trigger_extraction(
 
         logger = logging.getLogger(logger_name)
 
-        query = f"fields matching: {', '.join(db_schema.schema_definition.keys())}"
+        props_def = (
+            db_schema.schema_definition.get("properties", db_schema.schema_definition)
+            if isinstance(db_schema.schema_definition, dict)
+            else {}
+        )
+        field_keys = list(props_def.keys())
+        query = f"fields matching: {', '.join(field_keys)}"
         logger.info(f"Retrieving chunks for extraction query: '{query}'")
         chunks = await orchestrator.retrieve(
             session, query, document_id=payload.document_id, limit=5

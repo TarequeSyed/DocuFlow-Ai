@@ -8,6 +8,7 @@ from fastapi import (
     BackgroundTasks,
     Depends,
     File,
+    Form,
     HTTPException,
     UploadFile,
     status,
@@ -30,6 +31,7 @@ UPLOAD_DIR = "uploads"
 async def upload_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
+    category: str = Form("UNKNOWN"),
     session: AsyncSession = Depends(get_db_session),
 ) -> Any:
     """
@@ -77,7 +79,7 @@ async def upload_document(
         mime_type=file.content_type or "application/octet-stream",
         size_bytes=len(content),
         status="PENDING",
-        category="UNKNOWN",
+        category=category,
     )
     session.add(new_doc)
     await session.commit()
