@@ -17,6 +17,7 @@ class DocumentResponse(BaseModel):
     size_bytes: int
     status: str
     category: str
+    full_text: str | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

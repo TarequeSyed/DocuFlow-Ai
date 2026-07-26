@@ -132,3 +132,79 @@ async def list_documents(
     total = count_result.scalar() or 0
 
     return {"items": documents, "total": total}
+
+
+from app.services.retrieval.orchestrator import AdaptiveRetrievalOrchestrator
+from app.core.config import settings
+from pydantic import BaseModel
+
+class ChatRequest(BaseModel):
+    query: str
+
+class ChatResponse(BaseModel):
+    response: str
+    sources: list[dict[str, Any]]
+
+orchestrator = AdaptiveRetrievalOrchestrator()
+
+@router.post("/{document_id}/chat", response_model=ChatResponse)
+async def chat_with_document(
+    document_id: uuid.UUID,
+    payload: ChatRequest,
+    session: AsyncSession = Depends(get_db_session),
+) -> Any:
+    """
+    Document-scoped dynamic QA chat. Performs semantic search over chunks and
+    queries LLM for a natural context-specific answer.
+    """
+    chunks = await orchestrator.retrieve(
+        session,
+        query=payload.query,
+        document_id=document_id,
+        limit=4,
+    )
+    
+    context = "\n\n".join([f"--- Chunk {i+1} ---\n{c['content']}" for i, c in enumerate(chunks)])
+    
+    api_key = settings.OPENAI_API_KEY
+    if api_key and api_key.strip():
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import SystemMessage, HumanMessage
+            
+            system_prompt = (
+                "You are a helpful, extremely concise document question-answering assistant.\n"
+                "Answer the user's question based ONLY on the provided document chunks.\n"
+                "Be direct, specific, and format key details nicely. Do not start with generic pleasantries.\n"
+                "If the context does not contain the answer, state that you cannot find it in the document."
+            )
+            
+            llm = ChatOpenAI(openai_api_key=api_key, model="gpt-4o-mini", temperature=0.0, max_tokens=1000)
+            user_prompt = f"Document Context Chunks:\n{context}\n\nQuestion: {payload.query}"
+            
+            response = await llm.ainvoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_prompt)
+            ])
+            answer = response.content.strip()
+        except Exception as e:
+            answer = f"Error querying LLM: {str(e)}. Context match:\n\n{chunks[0]['content'] if chunks else ''}"
+    else:
+        if chunks:
+            answer = f"Here is the relevant excerpt from the document:\n\n\"{chunks[0]['content']}\""
+        else:
+            answer = "I could not find any relevant information in the document context."
+
+    return {
+        "response": answer,
+        "sources": [
+            {
+                "chunk_id": c["chunk_id"],
+                "document_id": str(c["document_id"]),
+                "content": c["content"],
+                "score": c["score"],
+                "page_number": c.get("page_number") or 1,
+            }
+            for c in chunks
+        ]
+    }

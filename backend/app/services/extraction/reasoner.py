@@ -153,52 +153,78 @@ class CrossDocReasoner:
         data2 = self._get_payload_dict(ext2)
 
         discrepancies = DiscrepancyList()
-
-        all_keys = set(data1.keys()).union(set(data2.keys()))
         matched_count = 0
         total_compared = 0
 
-        for key in all_keys:
-            val1 = data1.get(key)
-            val2 = data2.get(key)
+        # Helper to normalize keys (e.g., vendor to supplier, total_value to total_amount)
+        def normalize_key(k: str) -> str:
+            k_clean = k.lower().replace("_", "").replace(" ", "")
+            if k_clean in ["supplier", "vendor", "partya", "partyb", "seller"]:
+                return "party"
+            if k_clean in ["totalvalue", "totalamount", "amount", "value", "price"]:
+                return "value"
+            if k_clean in ["poreference", "ponumber", "po", "poref"]:
+                return "po"
+            if k_clean in ["invoicenumber", "invoiceno", "invoice"]:
+                return "invoice"
+            return k_clean
 
-            if val1 is not None and val2 is not None:
-                total_compared += 1
-                s1 = str(val1).strip().lower()
-                s2 = str(val2).strip().lower()
-                if s1 == s2:
-                    matched_count += 1
-                else:
-                    tag = "VALUE_MISMATCH" if "amount" in key or "total" in key else "SUPPLIER_MISMATCH"
-                    discrepancies.append(
-                        {
-                            "field": key,
-                            "type": tag,
-                            "severity": "HIGH" if "amount" in key or "total" in key else "MEDIUM",
-                            "value_doc_1": val1,
-                            "value_doc_2": val2,
-                            "explanation": f"Field '{key}' mismatch: Doc 1 has '{val1}' vs Doc 2 has '{val2}'.",
-                        }
-                    )
-                    discrepancies.append(tag)
+        # Normalize and filter payload dicts
+        norm_data1 = {normalize_key(k): v for k, v in data1.items() if v is not None}
+        norm_data2 = {normalize_key(k): v for k, v in data2.items() if v is not None}
 
-        text1 = (doc1.full_text or "").lower()
-        text2 = (doc2.full_text or "").lower()
+        # Compare overlapping keys dynamically
+        overlapping_keys = set(norm_data1.keys()).intersection(set(norm_data2.keys()))
 
-        if "acme" in text1 and "acme" in text2:
-            matched_count += 1
+        for key in overlapping_keys:
+            val1 = norm_data1[key]
+            val2 = norm_data2[key]
+
             total_compared += 1
 
-        if "$13,500.00" in (doc1.full_text or "") and "$13,500.00" in (doc2.full_text or ""):
-            matched_count += 1
-            total_compared += 1
+            # Value normalization (strip currency symbols, commas, case, whitespace)
+            def normalize_val(v: Any) -> str:
+                return str(v).replace("$", "").replace(",", "").strip().lower()
 
-        # Check delivery note verification
-        if not ("dn-0092" in text1 or "dn-0092" in text2 or "delivery" in text1):
-            discrepancies.append("DELIVERY_NOT_FOUND")
+            if normalize_val(val1) == normalize_val(val2):
+                matched_count += 1
+            else:
+                tag = "VALUE_MISMATCH" if key == "value" else "SUPPLIER_MISMATCH"
+                discrepancies.append(
+                    {
+                        "field": key,
+                        "type": tag,
+                        "severity": "HIGH" if key == "value" else "MEDIUM",
+                        "value_doc_1": val1,
+                        "value_doc_2": val2,
+                        "explanation": f"Field '{key}' mismatch: Doc 1 has '{val1}' vs Doc 2 has '{val2}'.",
+                    }
+                )
+
+        # Check delivery note verification from the workspace database
+        if doc1.category in ["INVOICE", "PURCHASE_ORDER"] and doc2.category in ["INVOICE", "PURCHASE_ORDER"]:
+            dn_stmt = select(Document).where(Document.category == "DELIVERY_NOTE")
+            dn_res = await session.execute(dn_stmt)
+            delivery_notes = dn_res.scalars().all()
+            if not delivery_notes:
+                discrepancies.append(
+                    {
+                        "field": "delivery_note",
+                        "type": "DELIVERY_NOT_FOUND",
+                        "severity": "HIGH",
+                        "value_doc_1": "None Found",
+                        "value_doc_2": "None Found",
+                        "explanation": "Reconciliation warning: No corresponding Delivery Note was found in the workspace to verify shipment.",
+                    }
+                )
+
+        # Calculate dynamic confidence match score
+        if total_compared > 0:
+            confidence = matched_count / total_compared
+        else:
+            confidence = 1.0 if doc1.category == doc2.category else 0.5
 
         status_str = "MATCHED" if len(discrepancies) == 0 else "DISCREPANCY"
-        confidence = (matched_count / total_compared) if total_compared > 0 else 0.95
 
         summary = (
             f"Successfully reconciled {doc1.filename} against {doc2.filename}. "

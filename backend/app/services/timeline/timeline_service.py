@@ -132,6 +132,7 @@ class TimelineService:
                         "category": doc.category,
                         "references": references,
                         "size_bytes": doc.size_bytes,
+                        "entities": [ent.name for ent in entities],
                     },
                 )
             )

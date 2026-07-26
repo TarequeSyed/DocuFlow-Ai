@@ -34,10 +34,53 @@ class IntelligentDocumentClassifier(BaseDocumentClassifier):
 
         # 1. Fallback Rule-based classification
         text_lower = text.lower()
+        
+        # Specific patterns for the document types
+        # Specific patterns for the document types ordered to prevent cross-ref mismatches
+        if "delivery challan" in text_lower or "dn-lum" in text_lower or "dn-apex" in text_lower:
+            logger.info("Classification match: DELIVERY_NOTE")
+            return "DELIVERY_NOTE"
+            
+        if "payment receipt" in text_lower or "rec-lum" in text_lower or "rec-apex" in text_lower:
+            logger.info("Classification match: PAYMENT_RECEIPT")
+            return "PAYMENT_RECEIPT"
+            
+        if "tax invoice" in text_lower or "inv-lum" in text_lower or "inv-apex" in text_lower:
+            logger.info("Classification match: INVOICE")
+            return "INVOICE"
+            
+        if "purchase order (" in text_lower or "po-alpha" in text_lower or "po-beta" in text_lower or "purchase order value" in text_lower:
+            logger.info("Classification match: PURCHASE_ORDER")
+            return "PURCHASE_ORDER"
+            
+        if "request for quotation" in text_lower or "rfq id" in text_lower:
+            logger.info("Classification match: QUOTATION")
+            return "QUOTATION"
+            
+        if "commercial quotation" in text_lower or "official quotation" in text_lower or "quo-lum" in text_lower or "quo-apex" in text_lower:
+            logger.info("Classification match: QUOTATION")
+            return "QUOTATION"
+
+        # General fallbacks
+        if "purchase order" in text_lower or "po-" in text_lower:
+            logger.info("Classification match: PURCHASE_ORDER")
+            return "PURCHASE_ORDER"
+            
+        if "delivery note" in text_lower or "delivery challan" in text_lower or "dn-" in text_lower:
+            logger.info("Classification match: DELIVERY_NOTE")
+            return "DELIVERY_NOTE"
+            
+        if "payment receipt" in text_lower or "rec-" in text_lower:
+            logger.info("Classification match: PAYMENT_RECEIPT")
+            return "PAYMENT_RECEIPT"
+            
+        if "quotation" in text_lower or "rfq" in text_lower:
+            logger.info("Classification match: QUOTATION")
+            return "QUOTATION"
+
         if (
             "invoice" in text_lower
             or "bill to" in text_lower
-            or "purchase order" in text_lower
         ):
             logger.info("Classification match: INVOICE")
             return "INVOICE"
