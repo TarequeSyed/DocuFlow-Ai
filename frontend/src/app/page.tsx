@@ -311,7 +311,9 @@ export default function Home() {
 
   const handleSelectTimelineEvent = (event: any) => {
     const targetDoc = documents.find(
-      (d) => d.filename.toLowerCase() === (event.filename || "").toLowerCase()
+      (d) =>
+        d.id === event.document_id ||
+        d.filename.toLowerCase() === (event.filename || event.document_title || "").toLowerCase()
     );
     if (targetDoc) {
       setSelectedDocumentId(targetDoc.id);
