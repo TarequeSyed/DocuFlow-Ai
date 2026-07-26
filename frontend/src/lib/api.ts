@@ -40,7 +40,8 @@ export const api = {
     fetchApi<{ message: string }>(`/demo/reset`, { method: "DELETE" }),
 
   // Documents
-  getDocuments: () => fetchApi<DocumentItem[]>("/documents"),
+  getDocuments: () =>
+    fetchApi<{ items: DocumentItem[]; total: number }>("/documents?limit=100").then((r) => r.items),
 
   getDocument: (id: string) => fetchApi<DocumentItem>(`/documents/${id}`),
 
@@ -65,9 +66,15 @@ export const api = {
   deleteDocument: (id: string) =>
     fetchApi<{ message: string }>(`/documents/${id}`, { method: "DELETE" }),
 
+  chatDocument: (id: string, query: string) =>
+    fetchApi<{ response: string; sources: any[] }>(`/documents/${id}/chat`, {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    }),
+
   // Schemas
   getSchemas: () =>
-    fetchApi<{ items: ExtractionSchemaItem[]; total: number }>("/schemas").then((r) => r.items),
+    fetchApi<{ items: ExtractionSchemaItem[]; total: number }>("/schemas?limit=100").then((r) => r.items),
 
   createSchema: (data: {
     name: string;
@@ -104,10 +111,10 @@ export const api = {
 
   // Vector Search
   search: (query: string, document_id?: string) =>
-    fetchApi<SearchResultItem[]>("/search", {
+    fetchApi<{ results: SearchResultItem[] }>("/search", {
       method: "POST",
       body: JSON.stringify({ query, document_id }),
-    }),
+    }).then((r) => r.results),
 
   // Knowledge Graph
   getGraph: (document_id?: string) =>
